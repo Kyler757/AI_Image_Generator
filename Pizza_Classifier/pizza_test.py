@@ -1,0 +1,165 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+from torch import nn
+from torch.nn import functional as F
+from torch.utils.data import Dataset, DataLoader
+from torchvision.transforms import functional as TF
+import cv2
+
+
+pizzapath = "./pizza.npy"
+notpizzapath = "./not_pizza.npy"
+
+class Dataset(Dataset):
+    def __init__(self, pizzapath, notpizzapath, train):
+        self.pizzas = np.load(pizzapath)
+        self.real_test = self.pizzas[-train:]
+        self.pizzas = self.pizzas[:-train]
+        self.notpizzas = np.load(notpizzapath)
+        self.fake_test = self.notpizzas[-train:]
+        self.notpizzas = self.notpizzas[:-train]
+
+    def __len__(self):
+        return len(self.pizzas)
+
+    def __getitem__(self, idx):
+        pizza = self.pizzas[idx].astype(np.float32) / 127.5 - 1.0
+        notpizza = self.notpizzas[idx].astype(np.float32) / 127.5 - 1.0
+        return torch.from_numpy(pizza), torch.from_numpy(notpizza)
+
+
+
+class Discriminator(nn.Module):
+    def __init__(self):
+        super(Discriminator, self).__init__()
+        # start at (3, 384, 512)
+        self.conv_layer1 = nn.Sequential(
+            # (64, 192, 256)
+            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3),
+            nn.LeakyReLU(0.2, inplace=False),
+        )
+        self.conv_layer2 = nn.Sequential(
+            # (128, 96, 128)
+            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
+            nn.LeakyReLU(0.2, inplace=False),
+        )
+        self.conv_layer3 = nn.Sequential(
+            # (256, 48, 64)
+            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
+            nn.LeakyReLU(0.2, inplace=False),
+        )
+        self.conv_layer4 = nn.Sequential(
+            # (512, 24, 32)
+            nn.Conv2d(256, 512, kernel_size=5, stride=2, padding=2),
+            nn.LeakyReLU(0.2, inplace=False),
+        )
+        self.conv_layer5 = nn.Sequential(
+            # (1028, 12, 16)
+            nn.Conv2d(512, 1028, kernel_size=5, stride=2, padding=2),
+            nn.LeakyReLU(0.2, inplace=False),
+            nn.Dropout2d(0.3)
+        )
+
+
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(1028*12*16, 1),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        x = self.conv_layer1(x)
+        x = self.conv_layer2(x)
+        x = self.conv_layer3(x)
+        x = self.conv_layer4(x)
+        x = self.conv_layer5(x)
+        return self.fc(x)
+
+
+def show(img):
+    # Display image
+    img = (img + 1)*127.5
+    img = img.clip(0, 255).astype(np.uint8)
+    img = np.transpose(img, (1, 2, 0))
+    plt.imshow(img, cmap='grey', vmin=0, vmax=255)
+    plt.show()
+
+
+def save_checkpoint(dis, dis_opt, epoch, path):
+    torch.save({
+        'epoch': epoch,
+        'dis_state_dict': dis.state_dict(),
+        'dis_optimizer': dis_opt.state_dict()
+    }, path)
+
+
+def load_checkpoint(dis, dis_opt, path):
+    if os.path.exists(path):
+        if torch.cuda.is_available():
+            checkpoint = torch.load(path)
+        else:
+            checkpoint = torch.load(path, map_location=torch.device('cpu'))
+        dis.load_state_dict(checkpoint['dis_state_dict'])
+        dis_opt.load_state_dict(checkpoint['dis_optimizer'])
+        print(f"Checkpoint loaded from epoch {checkpoint['epoch']}")
+        return checkpoint['epoch']
+    return 0
+
+
+def trainNN(epochs=0, batch_size=16, lr=0.0002, save_time=1, save_dir='', device='cuda' if torch.cuda.is_available() else 'cpu'):
+    dis = Discriminator().to(device)
+    criterion = torch.nn.BCELoss()
+    dis_opt = torch.optim.Adam(dis.parameters(), lr=lr, betas=(0.5, 0.999))
+
+    start_epoch = load_checkpoint(dis, dis_opt, save_dir)
+
+    if epochs>0:
+        dataset = Dataset(pizzapath, notpizzapath, 50)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
+
+        for epoch in range(start_epoch, start_epoch + epochs):
+            i = 0
+            for pizzas, nonpizzas in loader:
+                pizzas = pizzas.to(device, non_blocking=True)
+                nonpizzas = nonpizzas.to(device, non_blocking=True)
+                print(i)
+                i += 1
+
+                dis_opt.zero_grad()
+
+                real_preds = dis(pizzas)
+                fake_preds = dis(nonpizzas)
+
+                real_labels = (torch.ones_like(real_preds)).to(device)
+                fake_labels = (torch.zeros_like(fake_preds)).to(device)
+
+                real_loss = criterion(real_preds, real_labels)
+                fake_loss = criterion(fake_preds, fake_labels)
+                d_loss = real_loss + fake_loss
+                d_loss.backward()
+                dis_opt.step()
+
+            if (epoch + 1) % save_time == 0:
+                save_checkpoint(gen, dis, gen_opt, dis_opt, epoch + 1, save_dir)
+                folder_path = save_dir[:-4]
+                if not os.path.exists(folder_path):
+                    os.makedirs(folder_path)
+                r = torch.randn(2, 100).to(device)
+                im = gen(r*0.5).detach().cpu().numpy()[0]
+                im = np.transpose(im, (1, 2, 0))  # shape: (218, 178, 3)
+                im = ((im + 1)*127.5).clip(0, 255).astype(np.uint8)
+                plt.imsave(f'{folder_path}/epoch{epoch+1}.png', im)
+                print(f"Epoch {epoch + 1} - real Loss: {real_loss.item():.4f}, fake Loss: {fake_loss.item():.4f}")
+
+
+
+
+
+if __name__ == '__main__':
+    import multiprocessing
+    multiprocessing.freeze_support()
+
+    print("CUDA Available:", torch.cuda.is_available())
+    trainNN(100000, 16, save_time=1, save_dir='save.pth')
