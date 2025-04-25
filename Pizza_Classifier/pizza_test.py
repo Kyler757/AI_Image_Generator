@@ -7,6 +7,7 @@ from torch.nn import functional as F
 from torch.utils.data import Dataset, DataLoader
 from torchvision.transforms import functional as TF
 import cv2
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 
 pizzapath = "./pizza.npy"
@@ -28,6 +29,9 @@ class Dataset(Dataset):
         pizza = self.pizzas[idx].astype(np.float32) / 127.5 - 1.0
         notpizza = self.notpizzas[idx].astype(np.float32) / 127.5 - 1.0
         return torch.from_numpy(pizza), torch.from_numpy(notpizza)
+
+    def get_test(self):
+        return torch.from_numpy(self.real_test.astype(np.float32) / 127.5 - 1.0), torch.from_numpy(self.fake_test.astype(np.float32) / 127.5 - 1.0)
 
 
 
@@ -144,7 +148,19 @@ def trainNN(epochs=0, batch_size=16, lr=0.0002, save_time=1, save_dir='', device
             print(f"Epoch {epoch + 1} - real Loss: {real_loss.item():.4f}, fake Loss: {fake_loss.item():.4f}")
 
 
-    
+    real_test, fake_test = dataset.get_test()
+    real_preds = dis(real_test)
+    fake_preds = dis(fake_test)
+    real_labels = torch.ones_like(real_preds)
+    fake_labels = torch.zeros_like(fake_preds)
+
+    y_true = np.concatenate([real_labels, fake_labels])
+    y_pred = np.concatenate([real_preds, fake_preds])
+
+    cm = confusion_matrix(y_true, y_pred)
+    disp_cm = ConfusionMatrixDisplay(cm)
+    disp_cm.plot()
+    plt.show()
 
 
 if __name__ == '__main__':
