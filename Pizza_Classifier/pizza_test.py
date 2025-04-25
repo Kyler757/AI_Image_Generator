@@ -149,17 +149,50 @@ def trainNN(epochs=0, batch_size=16, lr=0.0002, save_time=1, save_dir='', device
 
 
     real_test, fake_test = dataset.get_test()
-    real_preds = dis(real_test)
-    fake_preds = dis(fake_test)
+    real_test = real_test.to(device)
+    fake_test = fake_test.to(device)
+    real_preds = torch.round(dis(real_test))
+    fake_preds = torch.round(dis(fake_test))
     real_labels = torch.ones_like(real_preds)
     fake_labels = torch.zeros_like(fake_preds)
 
-    y_true = np.concatenate([real_labels, fake_labels])
-    y_pred = np.concatenate([real_preds, fake_preds])
+    y_true = np.concatenate([real_labels.cpu().detach().numpy(), fake_labels.cpu().detach().numpy()])
+    y_pred = np.concatenate([real_preds.cpu().detach().numpy(), fake_preds.cpu().detach().numpy()])
 
     cm = confusion_matrix(y_true, y_pred)
     disp_cm = ConfusionMatrixDisplay(cm)
     disp_cm.plot()
+    plt.show()
+
+    fig, axes = plt.subplots(2, 5, figsize=(15, 6))
+    fig.suptitle("Test Images and Predictions", fontsize=16)
+
+
+    num_show = 5
+    real_imgs = real_test[:num_show].cpu().detach().numpy()
+    fake_imgs = fake_test[:num_show].cpu().detach().numpy()
+    real_preds_np = real_preds[:num_show].cpu().detach().numpy()
+    fake_preds_np = fake_preds[:num_show].cpu().detach().numpy()
+
+    for i in range(num_show):
+        img = real_imgs[i]
+        pred = "Real" if real_preds_np[i] >= 0.5 else "Fake"
+        img = ((img + 1) * 127.5).clip(0, 255).astype(np.uint8).transpose(1, 2, 0)
+        axes[0, i].imshow(img)
+        axes[0, i].set_title(f"Pred: {pred}")
+        axes[0, i].axis("off")
+
+    for i in range(num_show):
+        img = fake_imgs[i]
+        pred = "Real" if fake_preds_np[i] >= 0.5 else "Fake"
+        img = ((img + 1) * 127.5).clip(0, 255).astype(np.uint8).transpose(1, 2, 0)
+        axes[1, i].imshow(img)
+        axes[1, i].set_title(f"Pred: {pred}")
+        axes[1, i].axis("off")
+
+    axes[0, 0].set_ylabel("Real Test", fontsize=12)
+    axes[1, 0].set_ylabel("Fake Test", fontsize=12)
+    plt.tight_layout()
     plt.show()
 
 
@@ -168,4 +201,4 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     print("CUDA Available:", torch.cuda.is_available())
-    trainNN(100000, 16, save_time=1, save_dir='save.pth')
+    trainNN(0, 16, save_time=1, save_dir='save.pth')
