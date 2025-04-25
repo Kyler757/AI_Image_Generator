@@ -115,46 +115,36 @@ def trainNN(epochs=0, batch_size=16, lr=0.0002, save_time=1, save_dir='', device
 
     start_epoch = load_checkpoint(dis, dis_opt, save_dir)
 
-    if epochs>0:
-        dataset = Dataset(pizzapath, notpizzapath, 50)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
-        for epoch in range(start_epoch, start_epoch + epochs):
-            i = 0
-            for pizzas, nonpizzas in loader:
-                pizzas = pizzas.to(device, non_blocking=True)
-                nonpizzas = nonpizzas.to(device, non_blocking=True)
-                print(i)
-                i += 1
+    dataset = Dataset(pizzapath, notpizzapath, 50)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
-                dis_opt.zero_grad()
+    for epoch in range(start_epoch, start_epoch + epochs):
+        for pizzas, nonpizzas in loader:
+            pizzas = pizzas.to(device, non_blocking=True)
+            nonpizzas = nonpizzas.to(device, non_blocking=True)
 
-                real_preds = dis(pizzas)
-                fake_preds = dis(nonpizzas)
+            dis_opt.zero_grad()
 
-                real_labels = (torch.ones_like(real_preds)).to(device)
-                fake_labels = (torch.zeros_like(fake_preds)).to(device)
+            real_preds = dis(pizzas)
+            fake_preds = dis(nonpizzas)
 
-                real_loss = criterion(real_preds, real_labels)
-                fake_loss = criterion(fake_preds, fake_labels)
-                d_loss = real_loss + fake_loss
-                d_loss.backward()
-                dis_opt.step()
+            real_labels = (torch.ones_like(real_preds)).to(device)
+            fake_labels = (torch.zeros_like(fake_preds)).to(device)
 
-            if (epoch + 1) % save_time == 0:
-                save_checkpoint(gen, dis, gen_opt, dis_opt, epoch + 1, save_dir)
-                folder_path = save_dir[:-4]
-                if not os.path.exists(folder_path):
-                    os.makedirs(folder_path)
-                r = torch.randn(2, 100).to(device)
-                im = gen(r*0.5).detach().cpu().numpy()[0]
-                im = np.transpose(im, (1, 2, 0))  # shape: (218, 178, 3)
-                im = ((im + 1)*127.5).clip(0, 255).astype(np.uint8)
-                plt.imsave(f'{folder_path}/epoch{epoch+1}.png', im)
-                print(f"Epoch {epoch + 1} - real Loss: {real_loss.item():.4f}, fake Loss: {fake_loss.item():.4f}")
+            real_loss = criterion(real_preds, real_labels)
+            fake_loss = criterion(fake_preds, fake_labels)
+            d_loss = real_loss + fake_loss
+            d_loss.backward()
+            dis_opt.step()
 
 
+        if (epoch + 1) % save_time == 0:
+            save_checkpoint(dis, dis_opt, epoch + 1, save_dir)
+            print(f"Epoch {epoch + 1} - real Loss: {real_loss.item():.4f}, fake Loss: {fake_loss.item():.4f}")
 
+
+    
 
 
 if __name__ == '__main__':
