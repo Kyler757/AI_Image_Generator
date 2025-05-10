@@ -35,50 +35,48 @@ class Dataset(Dataset):
 
 
 
-class Discriminator(nn.Module):
+class Classifier(nn.Module):
     def __init__(self):
-        super(Discriminator, self).__init__()
+        super(Classifier, self).__init__()
         # start at (3, 384, 512)
         self.conv_layer1 = nn.Sequential(
-            # (64, 192, 256)
-            nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3),
+            # (64, 96, 128)
+            nn.Conv2d(3, 64, kernel_size=5, stride=4, padding=2),
             nn.LeakyReLU(0.2, inplace=False),
         )
         self.conv_layer2 = nn.Sequential(
-            # (128, 96, 128)
-            nn.Conv2d(64, 128, kernel_size=5, stride=2, padding=2),
-            nn.LeakyReLU(0.2, inplace=False),
-        )
-        self.conv_layer3 = nn.Sequential(
-            # (256, 48, 64)
-            nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
-            nn.LeakyReLU(0.2, inplace=False),
-        )
-        self.conv_layer4 = nn.Sequential(
-            # (512, 24, 32)
-            nn.Conv2d(256, 512, kernel_size=5, stride=2, padding=2),
-            nn.LeakyReLU(0.2, inplace=False),
-        )
-        self.conv_layer5 = nn.Sequential(
-            # (1028, 12, 16)
-            nn.Conv2d(512, 1028, kernel_size=5, stride=2, padding=2),
+            # (128, 24, 32)
+            nn.Conv2d(64, 128, kernel_size=5, stride=4, padding=2),
             nn.LeakyReLU(0.2, inplace=False),
             nn.Dropout2d(0.3)
         )
+        # self.conv_layer3 = nn.Sequential(
+        #     # (256, 48, 64)
+        #     nn.Conv2d(128, 256, kernel_size=5, stride=2, padding=2),
+        #     nn.LeakyReLU(0.2, inplace=False),
+        # )
+        # self.conv_layer4 = nn.Sequential(
+        #     # (512, 24, 32)
+        #     nn.Conv2d(256, 512, kernel_size=5, stride=2, padding=2),
+        #     nn.LeakyReLU(0.2, inplace=False),
+        # )
+        # self.conv_layer5 = nn.Sequential(
+        #     # (1028, 12, 16)
+        #     nn.Conv2d(512, 1028, kernel_size=5, stride=2, padding=2),
+        #     nn.LeakyReLU(0.2, inplace=False),
+        #     nn.Dropout2d(0.3)
+        # )
 
 
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(1028*12*16, 1),
+            nn.Linear(128*24*32, 1),
             nn.Sigmoid()
         )
 
     def forward(self, x):
         x = self.conv_layer1(x)
         x = self.conv_layer2(x)
-        x = self.conv_layer3(x)
-        x = self.conv_layer4(x)
-        x = self.conv_layer5(x)
         return self.fc(x)
 
 
@@ -113,7 +111,7 @@ def load_checkpoint(dis, dis_opt, path):
 
 
 def trainNN(epochs=0, batch_size=16, lr=0.0002, save_time=1, save_dir='', device='cuda' if torch.cuda.is_available() else 'cpu'):
-    dis = Discriminator().to(device)
+    dis = Classifier().to(device)
     criterion = torch.nn.BCELoss()
     dis_opt = torch.optim.Adam(dis.parameters(), lr=lr, betas=(0.5, 0.999))
 
@@ -201,4 +199,4 @@ if __name__ == '__main__':
     multiprocessing.freeze_support()
 
     print("CUDA Available:", torch.cuda.is_available())
-    trainNN(0, 16, save_time=1, save_dir='save.pth')
+    trainNN(0, 16, save_time=1, save_dir='save2.pth')
