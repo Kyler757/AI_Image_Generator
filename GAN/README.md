@@ -1,4 +1,5 @@
 # GAN Image Generator
+Using a GAN, the following code generates realistic faces that are completely AI generated.
 GAN stands for Generative Aversarial Network.
 This technique for image generation uses two types of networks to train; a discriminator and a generator.
 - Made by [Emmett Jaakkola](https://www.linkedin.com/in/emmett-jaakkola-234667208/) and [Kyler Nikolai](https://www.linkedin.com/in/kylernikolai/).
